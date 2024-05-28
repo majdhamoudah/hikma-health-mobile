@@ -79,17 +79,3 @@ export async function clear(): Promise<void> {
     await AsyncStorage.clear()
   } catch { }
 }
-
-/**
- * Get the HH api URL stored in encrypted storage
- * @returns {Promise<string | null>}
- */
-export async function getHHApiUrl(): Promise<string | null> {
-  // if in dev mode, use the HIKMA_API from the .env file
-  const DEV_HIKMA_API = Config.HIKMA_API
-  const HIKMA_API = await EncryptedStorage.getItem("HIKMA_API")
-  if (__DEV__ && HIKMA_API === null) {
-    return DEV_HIKMA_API || null
-  }
-  return await EncryptedStorage.getItem("HIKMA_API")
-}

@@ -26,20 +26,9 @@ import { colors } from "app/theme"
 import { useStores } from "app/models"
 import database from "app/db/"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { getHHApiUrl } from "app/utils/storage"
+
 
 const { height, width } = Dimensions.get("window")
-
-// const HIKMA_API = Config.HIKMA_API
-// import { useNavigation } from "@react-navigation/native"
-// import { useStores } from "app/models"
-
-const GOOGLE_TESTER_EMAIL = "tester.g@gmail.com"
-const GOOGLE_TESTER_PASSWORD = "tester"
-
-function isGoogleTester(email: string, password: string) {
-  return email === GOOGLE_TESTER_EMAIL && password === GOOGLE_TESTER_PASSWORD
-}
 
 interface LoginScreenProps extends AppStackScreenProps<"Login"> {}
 
@@ -90,50 +79,16 @@ export const LoginScreen: FC<LoginScreenProps> = observer(function LoginScreen({
     }
   }
 
-  const authAsGoogleTester = () => {
-    Alert.alert(
-      "You are about to sign in as a Tester",
-      "Authenticating as a tester will allow you to use the app without a valid QR code, and you do not need to connect to your own server as users are expected to do. This also means you will not be able to sync data from your backend to our app. Do you want to continue?",
-      [
-        {
-          text: "Cancel",
-          onPress: () => console.log("Cancel Pressed"),
-          style: "cancel",
-        },
-        {
-          text: "OK",
-          onPress: () => {
-            provider.setProvider({
-              id: "google_tester",
-              name: "Google Tester",
-              email: GOOGLE_TESTER_EMAIL,
-              clinic_id: uuidv4(),
-              clinic_name: "Test Clinic",
-              isSignedIn: true,
-            })
-          },
-        },
-      ],
-      { cancelable: false },
-    )
-  }
-
   const signIn = async () => {
     if (isLoading) return
-    const isGoogle = isGoogleTester(creds.email, creds.password)
-    if (isGoogle) return authAsGoogleTester()
-    const HIKMA_API = await getHHApiUrl()
-    if (!HIKMA_API) {
-      Alert.alert("Please register the app with a valid QR code")
-      return
-    }
+
     if (creds.email.length < 4 || creds.password.length < 4)
       return Alert.alert("Invalid email or password")
     setIsLoading(true)
 
     try {
       console.warn({ email: creds.email, password: creds.password })
-      const response = await fetch(`${HIKMA_API}/api/login`, {
+      const response = await fetch(`https://dotw-hikma.azurewebsites.net/api/login`, {
         method: "POST",
         headers: {
           Accept: "application/json",

@@ -9,7 +9,7 @@ global.Buffer = require('buffer').Buffer;
 
 // const HIKMA_API = Config.HIKMA_API
 
-// const SYNC_API = `${HIKMA_API}/api/v2/sync`
+// const SYNC_API = `https://dotw-hikma.azurewebsites.net/api/v2/sync`
 
 
 /**

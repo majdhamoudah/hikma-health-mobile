@@ -84,10 +84,10 @@ android {
 
     namespace 'com.hikmahealth'
     defaultConfig {
-        applicationId 'com.hikmahealth'
+        applicationId 'com.dotw.hikmahealth'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
+        versionCode 6
         versionName "0.2.5"
 
         buildConfigField("boolean", "REACT_NATIVE_UNSTABLE_USE_RUNTIME_SCHEDULER_ALWAYS", (findProperty("reactNative.unstable_useRuntimeSchedulerAlways") ?: true).toString())

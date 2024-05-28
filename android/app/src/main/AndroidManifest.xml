@@ -37,7 +37,7 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="hikma-health-mobile"/>
-        <data android:scheme="com.hikmahealth"/>
+        <data android:scheme="com.dotw.hikmahealth"/>
         <data android:scheme="exp+hikma-health-mobile"/>
       </intent-filter>
     </activity>

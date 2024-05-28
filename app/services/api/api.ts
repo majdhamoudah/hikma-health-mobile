@@ -16,7 +16,6 @@ import EventModel from "app/db/model/Event"
 import VisitModel from "app/db/model/Visit"
 import { isValid } from "date-fns"
 import { Q } from "@nozbe/watermelondb"
-import { getHHApiUrl } from "app/utils/storage"
 
 /**
  * Configuring the apisauce instance.
@@ -278,11 +277,8 @@ export class Api {
       JSON.stringify(migration),
     )}`
 
-    const HH_API = await getHHApiUrl();
-    if (!HH_API) {
-      throw new Error("HH API URL not found")
-    }
-    const SYNC_API = `${HH_API}/api/v2/sync`
+
+    const SYNC_API = `https://dotw-hikma.azurewebsites.net/api/v2/sync`
 
     const result = await fetch(`${SYNC_API}?${urlParams}`, {
       // Headers include the username and password in base64 encoded string
@@ -307,11 +303,8 @@ export class Api {
    * @returns {Promise<void | { experimentalRejectedIds?: SyncRejectedIds | undefined; } | undefined>) | undefined}
    */
   async syncPush(lastPulledAt: number, changes: SyncDatabaseChangeSet, headers: Headers): Promise<SyncPushResult | undefined> {
-    const HH_API = await getHHApiUrl();
-    if (!HH_API) {
-      throw new Error("HH API URL not found")
-    }
-    const SYNC_API = `${HH_API}/api/v2/sync`
+
+    const SYNC_API = `https://dotw-hikma.azurewebsites.net/api/v2/sync`
     const result = await fetch(`${SYNC_API}?last_pulled_at=${lastPulledAt}`, {
       method: 'POST',
       headers: headers,
