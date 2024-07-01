@@ -185,10 +185,11 @@ export const LoginScreen: FC<LoginScreenProps> = observer(function LoginScreen({
           <TextField
             onChangeText={(t) =>
               updateCreds((draft) => {
-                draft.email = t
+                draft.email = t.trim()
               })
             }
             value={creds.email}
+            autoCapitalize="none"
             labelTx={"login.email"}
           />
           <TextField
@@ -199,6 +200,7 @@ export const LoginScreen: FC<LoginScreenProps> = observer(function LoginScreen({
               })
             }
             labelTx={"login.password"}
+            autoCapitalize="none"
             secureTextEntry
           />
 

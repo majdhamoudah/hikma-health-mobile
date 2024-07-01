@@ -3,6 +3,7 @@ import { observer } from "mobx-react-lite"
 import { Alert, ViewStyle } from "react-native"
 import { AppStackScreenProps } from "app/navigators"
 import {
+  $inputWrapperStyle,
   Button,
   DiagnosisEditor,
   DiagnosisPickerButton,
@@ -18,16 +19,13 @@ import {
 import { useImmer } from "use-immer"
 import database from "app/db"
 import EventFormModel from "app/db/model/EventForm"
-import { Picker } from "@react-native-picker/picker"
 import EventModel from "app/db/model/Event"
 import { Controller, useForm } from "react-hook-form"
 import { translate } from "app/i18n"
 import { colors } from "app/theme"
 import { api } from "app/services/api"
 import { useStores } from "app/models"
-import { CommonActions } from "@react-navigation/native"
-// import { useNavigation } from "@react-navigation/native"
-// import { useStores } from "app/models"
+import { CommonActions, useFocusEffect } from "@react-navigation/native"
 import {
   BottomSheetModal,
   BottomSheetModalProvider,
@@ -36,6 +34,9 @@ import {
 import { ICDEntry, MedicationEntry } from "app/types"
 import { DatePickerButton } from "app/components/DatePicker"
 import { isValid } from "date-fns"
+import _ from "lodash"
+import DropDownPicker from "react-native-dropdown-picker"
+import { LucideAlertCircle } from "lucide-react-native"
 
 // type ModalState = { activeModal: "medication" | "diagnosis" | null, medication: MedicationEntry | null, diagnoses: any[] }
 type ModalState =
@@ -43,7 +44,21 @@ type ModalState =
   | { activeModal: "medication"; medication: MedicationEntry }
   | { activeModal: "diagnoses" }
 
-interface EventFormScreenProps extends AppStackScreenProps<"EventForm"> { }
+interface EventFormScreenProps extends AppStackScreenProps<"EventForm"> {}
+
+/**
+Hook to manage multiple open pickers by Id
+*/
+export function useOpenDialogue() {
+  const [openId, setOpenId] = useState<null | string>(null)
+
+  return {
+    isOpen: (id: string) => openId === id,
+    openId,
+    openDialogue: (id: string) => () => setOpenId(id),
+    closeDialogue: () => setOpenId(null),
+  }
+}
 
 export const EventFormScreen: FC<EventFormScreenProps> = observer(function EventFormScreen({
   route,
@@ -59,7 +74,7 @@ export const EventFormScreen: FC<EventFormScreenProps> = observer(function Event
   } = route.params
   const { provider, language } = useStores()
 
-  const { register, reset, control, handleSubmit, setValue, getValues } = useForm<
+  const { control, handleSubmit, setValue, getValues, watch } = useForm<
     Record<string, string | number | Date | any[]>
   >({
     defaultValues: {},
@@ -68,6 +83,7 @@ export const EventFormScreen: FC<EventFormScreenProps> = observer(function Event
   const [medicines, setMedicines] = useState<MedicationEntry[]>([])
 
   const { form, state: formState, isLoading } = useEventForm(formId, visitId, patientId, eventId)
+  const { isOpen, openDialogue, closeDialogue } = useOpenDialogue()
 
   useEffect(() => {
     if (form && formState) {
@@ -93,6 +109,38 @@ export const EventFormScreen: FC<EventFormScreenProps> = observer(function Event
       bottomSheetModalRef.current?.dismiss()
     }
   }, [modalState.activeModal])
+
+  /** Close any open bottom sheets on back press, if none are open then you can leave the screen */
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (modalState.activeModal) {
+          bottomSheetModalRef.current?.close()
+          return true
+        } else {
+          return false
+        }
+      }
+
+      // const hardwareSubscription = BackHandler.addEventListener(
+      // 'hardwareBackPress',
+      // onBackPress
+      // );
+
+      const subscription = navigation.addListener("beforeRemove", (e) => {
+        const res = onBackPress()
+        if (res) {
+          e.preventDefault()
+        }
+      })
+
+      // return () => subscription.remove();
+      return () => {
+        subscription()
+      }
+    }, [modalState.activeModal]),
+  )
+
   const canSaveForm = useMemo(() => {
     if (loading) {
       return false
@@ -120,7 +168,7 @@ export const EventFormScreen: FC<EventFormScreenProps> = observer(function Event
             field.name.toLowerCase() !== "medications" &&
             field.fieldType.toLowerCase() !== "diagnosis" &&
             field.name.toLowerCase() !== "medicine" &&
-            field.fieldType.toLowerCase() !== "medicine"
+            field.fieldType.toLowerCase() !== "medicine",
         ) || []
 
     // if the form has medicine and diagnosis fields, add them to the form data
@@ -202,9 +250,9 @@ export const EventFormScreen: FC<EventFormScreenProps> = observer(function Event
   const snapPoints = useMemo(() => ["100%", "100%"], [])
 
   // callbacks
-  const handlePresentModalPress = useCallback(() => {
-    bottomSheetModalRef.current?.present()
-  }, [])
+  // const handlePresentModalPress = useCallback(() => {
+  // bottomSheetModalRef.current?.present()
+  // }, [])
   const handleSheetChanges = useCallback((index: number) => {
     console.log("handleSheetChanges", index)
     if (index === -1) {
@@ -253,7 +301,16 @@ export const EventFormScreen: FC<EventFormScreenProps> = observer(function Event
   }
 
   if (isLoading) return <Text>Loading...</Text>
-  if (!form) return <Text>Form not found</Text>
+  if (!form) {
+    return (
+      <View alignItems="center" pt={40} justifyContent="center">
+        <LucideAlertCircle size={60} color={colors.textDim} />
+        <Text size="lg">Form does not exist. </Text>
+      </View>
+    )
+  }
+
+  // console.log({ form: form.formFields })
 
   return (
     <BottomSheetModalProvider>
@@ -292,37 +349,57 @@ export const EventFormScreen: FC<EventFormScreenProps> = observer(function Event
                     control={control}
                   />
                 </If>
+
                 <If condition={field.inputType === "select" && field.fieldType !== "diagnosis"}>
-                  <Controller
-                    render={({ field: { onChange, value } }) => (
-                      <View style={{}}>
-                        <Text text={field.name} preset="formLabel" />
-                        <View
-                          style={{
-                            marginTop: 4,
-                            borderWidth: 1,
-                            borderRadius: 4,
-                            backgroundColor: colors.palette.neutral200,
-                            borderColor: colors.palette.neutral400,
-                            overflow: "hidden",
-                          }}
-                        >
-                          <Picker selectedValue={value} onValueChange={onChange}>
-                            <Picker.Item label="Select an option" value="" />
-                            {field.options?.map((option, idx) => (
-                              <Picker.Item
-                                key={option.value}
-                                label={option.label}
-                                value={option.value}
-                              />
-                            ))}
-                          </Picker>
-                        </View>
-                      </View>
-                    )}
-                    name={field.name as never}
-                    control={control}
-                  />
+                  <View style={{}}>
+                    <Text text={field.name} preset="formLabel" />
+                    <DropDownPicker
+                      open={isOpen(field.id)}
+                      // value={multiPickerValue(getValues(field.name) as any, field.multi || false)}
+                      value={multiPickerValue(watch(field.name) as any, field.multi || false)}
+                      searchable
+                      closeAfterSelecting
+                      style={{
+                        marginTop: 4,
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        backgroundColor: colors.palette.neutral200,
+                        borderColor: colors.palette.neutral400,
+                        zIndex: 990000,
+                        flex: 1,
+                      }}
+                      modalTitle={field.name}
+                      multiple={field.multi || false}
+                      modalContentContainerStyle={{
+                        marginTop: 4,
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        backgroundColor: colors.palette.neutral200,
+                        borderColor: colors.palette.neutral400,
+                        zIndex: 990000,
+                        flex: 1,
+                      }}
+                      searchPlaceholder={translate("search", { defaultValue: "Search" }) + "..."}
+                      searchTextInputStyle={$inputWrapperStyle}
+                      closeOnBackPressed
+                      onClose={closeDialogue}
+                      items={_.sortBy(field.options, ["label"])}
+                      setOpen={openDialogue(field.id)}
+                      listMode="MODAL"
+                      // setValue={onChange}
+                      setValue={(callback) => {
+                        const pickerValue = multiPickerValue(
+                          getValues(field.name) as any,
+                          field.multi || false,
+                        )
+                        const data = callback(pickerValue || "")
+
+                        const newValue = field.multi && Array.isArray(data) ? data.join("; ") : data
+
+                        setValue(field.name as never, newValue as never)
+                      }}
+                    />
+                  </View>
                 </If>
 
                 <If condition={field.inputType === "checkbox"}>
@@ -491,66 +568,76 @@ function useEventForm(
 
   useEffect(() => {
     /** Subscribe to the form */
-    const formSub = database.collections
+    let formSub: any
+    database.collections
       .get<EventFormModel>("event_forms")
-      .findAndObserve(formId)
-      .subscribe((form) => {
-        setForm(form)
-        if (!eventId) {
-          const state = form.formFields.map((field) => ({
-            fieldId: field.id,
-            value: null,
-            inputType: field.inputType,
-            name: field.name,
-          }))
-          // updateFormState(() => ({
-          //   ...defaultEvent,
-          //   formId,
-          //   visitId,
-          //   patientId,
-          //   formData: state,
-          // }))
+      .find(formId)
+      .then((record) => {
+        formSub = record.observe().subscribe((form) => {
+          setForm(form)
+          // TOMBSTONE JUNE 24, 2024
+          // if (!eventId) {
+          //   const state = form.formFields.map((field) => ({
+          //     fieldId: field.id,
+          //     value: null,
+          //     inputType: field.inputType,
+          //     name: field.name,
+          //   }))
+          //   // updateFormState(() => ({
+          //   //   ...defaultEvent,
+          //   //   formId,
+          //   //   visitId,
+          //   //   patientId,
+          //   //   formData: state,
+          //   // }))
 
-          updateFormState((draft) => {
-            // draft.formId = event.formId
-            // draft.visitId = event.visitId
-            // draft.patientId = event.patientId
-            // draft.formData = event.formData
-            // draft.createdAt = event.createdAt
-            // draft.updatedAt = event.updatedAt
-            // draft.id = event.id
-            // return draft
-          })
+          //   updateFormState((draft) => {
+          //     // draft.formId = event.formId
+          //     // draft.visitId = event.visitId
+          //     // draft.patientId = event.patientId
+          //     // draft.formData = event.formData
+          //     // draft.createdAt = event.createdAt
+          //     // draft.updatedAt = event.updatedAt
+          //     // draft.id = event.id
+          //     // return draft
+          //   })
+          //   // }
           // }
-        }
+        })
+      })
+      .catch((error) => {
+        console.error(error)
+        setForm(null)
+      })
+      .finally(() => {
         setIsLoading(false)
       })
 
     /** Subscribe to the event if it exists. If there is no event, create a new one */
     const eventSub = eventId
       ? database.collections
-        .get<EventModel>("events")
-        .findAndObserve(eventId)
-        .subscribe((event) => {
-          updateFormState((d) => {
-            let draft = d || ({} as any)
-            // if (draft) {
-            draft.formId = event.formId
-            draft.visitId = event.visitId
-            draft.patientId = event.patientId
-            draft.formData = event.formData
-            draft.createdAt = event.createdAt
-            draft.updatedAt = event.updatedAt
-            draft.id = event.id
-            return draft
-            // }
-            // return event
+          .get<EventModel>("events")
+          .findAndObserve(eventId)
+          .subscribe((event) => {
+            updateFormState((d) => {
+              let draft = d || ({} as any)
+              // if (draft) {
+              draft.formId = event.formId
+              draft.visitId = event.visitId
+              draft.patientId = event.patientId
+              draft.formData = event.formData
+              draft.createdAt = event.createdAt
+              draft.updatedAt = event.updatedAt
+              draft.id = event.id
+              return draft
+              // }
+              // return event
+            })
           })
-        })
       : null
 
     return () => {
-      formSub.unsubscribe()
+      formSub?.unsubscribe()
       eventSub?.unsubscribe()
       setIsLoading(true)
       setForm(null)
@@ -583,6 +670,23 @@ function useEventForm(
     // getFieldValue: getFieldValue,
     // setFieldValue,
   }
+}
+
+/**
+Given a form value and whether or not it supports multiple inputs, return the properly formatted value for the dropdown picker
+*/
+function multiPickerValue(
+  formValue: string | string[],
+  isMulti: boolean,
+  delim = "; ",
+): string | string[] {
+  if (isMulti === false) {
+    return String(formValue)
+  }
+  if (formValue?.length > 0 && typeof formValue === "string") {
+    return formValue.split(delim)
+  }
+  return []
 }
 
 const $root: ViewStyle = {

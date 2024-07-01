@@ -16,6 +16,9 @@ import EventModel from "app/db/model/Event"
 import VisitModel from "app/db/model/Visit"
 import { isValid } from "date-fns"
 import { Q } from "@nozbe/watermelondb"
+import PatientAdditionalAttribute from "app/db/model/PatientAdditionalAttribute"
+import { PatientData } from "app/types"
+import { RegistrationFormField } from "app/db/model/PatientRegistrationForm"
 
 /**
  * Configuring the apisauce instance.
@@ -49,6 +52,7 @@ export class Api {
 
   /**
    * Register a new patient
+   * @deprecated
    * @param {PatientModelData} patient
    * @returns {Promise<PatientModel>}
    */
@@ -66,6 +70,8 @@ export class Api {
         newPatient.hometown = patient.hometown
         newPatient.dateOfBirth = patient.dateOfBirth
         newPatient.additionalData = patient.additionalData
+        newPatient.governmentId = patient.governmentId
+        newPatient.externalPatientId = patient.externalPatientId
       })
 
       return pt
@@ -75,6 +81,7 @@ export class Api {
   /**
    * Update a patient by id
    * @param {string} id
+   * @deprecated
    * @param {PatientModelData} patient
    * @returns {Promise<PatientModel>}
    */
@@ -94,6 +101,8 @@ export class Api {
             newPatient.hometown = patient.hometown
             newPatient.dateOfBirth = patient.dateOfBirth
             newPatient.additionalData = patient.additionalData
+            newPatient.governmentId = patient.governmentId
+            newPatient.externalPatientId = patient.externalPatientId
           })
         } else {
           throw new Error("Patient not found")
@@ -123,9 +132,8 @@ export class Api {
     providerId: string,
     providerName: string,
     checkInTimestamp: number,
-    eventId?: string | null | undefined
-  ): Promise<{ eventId: string, visitId: string }> {
-
+    eventId?: string | null | undefined,
+  ): Promise<{ eventId: string; visitId: string }> {
     /** If there is an event Id, we are updating an existing event */
     if (eventId && eventId !== "" && visitId && visitId !== "") {
       const res = await database.write(async () => {
@@ -146,18 +154,20 @@ export class Api {
 
     /** If there is no event Id, we are creating a new event */
     return await database.write(async () => {
-      let visitQuery = null;
+      let visitQuery: VisitModel | null = null
       if (!event.visitId || event.visitId === "" || visitId === null) {
-        visitQuery = await database.get<VisitModel>("visits").prepareCreate((newVisit) => {
+        visitQuery = database.get<VisitModel>("visits").prepareCreate((newVisit) => {
           newVisit.patientId = event.patientId
           newVisit.clinicId = clinicId
           newVisit.providerId = providerId
           newVisit.providerName = providerName
-          newVisit.checkInTimestamp = isValid(checkInTimestamp) ? new Date(checkInTimestamp) : new Date()
+          newVisit.checkInTimestamp = isValid(checkInTimestamp)
+            ? new Date(checkInTimestamp)
+            : new Date()
           newVisit.metadata = event.metadata
         })
       }
-      const eventQuery = await database.get<EventModel>("events").prepareCreate((newEvent) => {
+      const eventQuery = database.get<EventModel>("events").prepareCreate((newEvent) => {
         newEvent.patientId = event.patientId
         newEvent.formId = event.formId
         newEvent.visitId = visitQuery !== null ? visitQuery.id : event.visitId
@@ -168,13 +178,11 @@ export class Api {
       })
 
       // batch create both of them
-      await database.batch(
-        visitQuery !== null ? [visitQuery, eventQuery] : [eventQuery]
-      )
+      await database.batch(visitQuery !== null ? [visitQuery, eventQuery] : [eventQuery])
 
       return {
         eventId: eventQuery.id,
-        visitId: visitQuery !== null ? visitQuery.id : event.visitId
+        visitId: visitQuery !== null ? visitQuery.id : event.visitId,
       }
     })
   }
@@ -192,7 +200,6 @@ export class Api {
       })
       return await deletedEvent.markAsDeleted()
     })
-
   }
 
   /**
@@ -216,28 +223,31 @@ export class Api {
    * @param {boolean} ignoreEmptyVisits
    * @returns {Promise<{ visit: VisitModel, events: EventModel[] }[]>}
    */
-  async fetchPatientReportData(patientId: string, ignoreEmptyVisits: boolean): Promise<{ visit: VisitModel, events: EventModel[] }[]> {
+  async fetchPatientReportData(
+    patientId: string,
+    ignoreEmptyVisits: boolean,
+  ): Promise<{ visit: VisitModel; events: EventModel[] }[]> {
     const visits = await database
       .get<VisitModel>("visits")
       .query(Q.and(Q.where("patient_id", patientId), Q.where("is_deleted", false)))
       .fetch()
 
-    const events = await database.get<EventModel>("events")
+    const events = await database
+      .get<EventModel>("events")
       .query(Q.and(Q.where("patient_id", patientId), Q.where("is_deleted", false)))
       .fetch()
 
-    const results = visits.map(visit => {
+    const results = visits.map((visit) => {
       return {
         visit,
-        events: events.filter(ev => ev.visitId === visit.id)
+        events: events.filter((ev) => ev.visitId === visit.id),
       }
     })
     if (ignoreEmptyVisits) {
-      return results.filter(res => res.events.length > 0)
+      return results.filter((res) => res.events.length > 0)
     }
-    return results;
+    return results
   }
-
 
   /**
    * Get the latest event by type
@@ -245,7 +255,10 @@ export class Api {
    * @param {EventTypes} eventType
    * @returns {Promise<EventModel["formData"] | null>}
    */
-  async getLatestPatientEventByType(patientId: string, eventType: string): Promise<EventModel["formData"] | null> {
+  async getLatestPatientEventByType(
+    patientId: string,
+    eventType: string,
+  ): Promise<EventModel["formData"] | null> {
     const results = await database
       .get<EventModel>("events")
       .query(
@@ -262,8 +275,6 @@ export class Api {
     return results[0]?.formData || null
   }
 
-
-
   /**
    * Sync Pull data from the server
    * @param {number} lastPulledAt
@@ -272,7 +283,12 @@ export class Api {
    * @param {Headers} headers
    * @returns {Promise<SyncPullResult>}
    */
-  async syncPull(lastPulledAt: number, schemaVersion: number, migration: MigrationSyncChanges, headers: Headers): Promise<SyncPullResult> {
+  async syncPull(
+    lastPulledAt: number,
+    schemaVersion: number,
+    migration: MigrationSyncChanges,
+    headers: Headers,
+  ): Promise<SyncPullResult> {
     const urlParams = `last_pulled_at=${lastPulledAt}&schema_version=${schemaVersion}&migration=${encodeURIComponent(
       JSON.stringify(migration),
     )}`
@@ -282,18 +298,17 @@ export class Api {
 
     const result = await fetch(`${SYNC_API}?${urlParams}`, {
       // Headers include the username and password in base64 encoded string
-      headers: headers
-    });
+      headers: headers,
+    })
 
     if (!result.ok) {
       console.error("Error fetching data from the server", { result })
       throw new Error(await result.text())
     }
 
-    const syncPullResult = await result.json() as SyncPullResult
+    const syncPullResult = (await result.json()) as SyncPullResult
     return syncPullResult
   }
-
 
   /**
    * Sync Push data to the server
@@ -302,23 +317,30 @@ export class Api {
    * @param {Headers} headers
    * @returns {Promise<void | { experimentalRejectedIds?: SyncRejectedIds | undefined; } | undefined>) | undefined}
    */
-  async syncPush(lastPulledAt: number, changes: SyncDatabaseChangeSet, headers: Headers): Promise<SyncPushResult | undefined> {
-
+  async syncPush(
+    lastPulledAt: number,
+    changes: SyncDatabaseChangeSet,
+    headers: Headers,
+  ): Promise<SyncPushResult | undefined> {
     const SYNC_API = `https://dotw-hikma.azurewebsites.net/api/v2/sync`
     const result = await fetch(`${SYNC_API}?last_pulled_at=${lastPulledAt}`, {
-      method: 'POST',
+      method: "POST",
       headers: headers,
-      body: JSON.stringify(changes)
-    });
+      body: JSON.stringify(changes),
+    })
 
     if (!result.ok) {
       throw new Error(await result.text())
     }
 
-    const syncPushResult = await result.json() as SyncPushResult
-    return syncPushResult;
+    const syncPushResult = (await result.json()) as SyncPushResult
+    return syncPushResult
   }
 }
+
+/**
+Given a PatientData input, and a field name, return
+*/
 
 // ✅ register patient
 // ✅ update patient by id
